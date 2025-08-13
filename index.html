@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Street Parking Prediction</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <style>
+    :root { --right-bg: #f6f7f9; }
+    html, body { height: 100%; margin: 0; }
+    .split { display: flex; height: 100vh; width: 100vw; }
+    .left  { position: relative; flex: 0 0 50%; min-width: 320px; overflow: hidden; background: #ddd; }
+    .right { flex: 1 1 50%;  min-width: 320px; background: var(--right-bg); display: flex; flex-direction: column; }
+    #map { position: absolute; inset: 0; }
+
+    /* Title box */
+    .title-box {
+      position: absolute; top: 20px; left: 20px;
+      background: rgba(0,0,0,0.6); color: #fff;
+      padding: 12px 16px; border-radius: 8px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      max-width: 320px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    .title-box h1 { font-size: 20px; margin: 0 0 4px; font-weight: 700; }
+    .title-box p { margin: 2px 0; font-size: 14px; line-height: 1.3; }
+
+    /* Legend */
+    .legend {
+      position: absolute; bottom: 20px; right: 20px;
+      background: rgba(255,255,255,0.9); padding: 10px;
+      border-radius: 6px; font: 13px system-ui;
+      box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    }
+    .legend div { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .legend span { width: 14px; height: 14px; border-radius: 2px; display: inline-block; }
+
+    /* Right panel content */
+    .panel-header {
+      padding: 12px 16px; border-bottom: 1px solid #e3e6ea; font: 14px system-ui;
+      color: #333; background: #fff;
+    }
+    .panel-header b { font-weight: 600; }
+    .panel-body {
+      padding: 12px 16px; overflow: auto; flex: 1 1 auto;
+      font: 13px system-ui; color: #333;
+    }
+    .gallery {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 10px;
+    }
+    .card {
+      background: #fff; border-radius: 8px; overflow: hidden;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08); border: 1px solid #e6e6e6;
+    }
+    .card img { width: 100%; height: 120px; object-fit: cover; display: block; }
+    .card .meta { padding: 6px 8px; font-size: 12px; color: #555; }
+    .muted { color: #777; }
+  </style>
+</head>
+<body>
+  <div class="split">
+    <!-- LEFT: Map panel -->
+    <div class="left">
+      <div id="map"></div>
+
+      <!-- Overlay: Title -->
+      <div class="title-box">
+        <h1>Street Parking Prediction in Atlanta</h1>
+        <p>Jaegeon Lee, Uijeong Hwang, Subhrajit Guhathakurta</p>
+        <p>Georgia Institute of Technology</p>
+      </div>
+
+      <!-- Overlay: Legend -->
+      <div class="legend">
+        <strong>Predicted Parking</strong>
+        <div><span style="background:#07ed41"></span> Parking</div>
+        <div><span style="background:#fb1313"></span> No Parking</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Images panel -->
+    <div class="right">
+      <div class="panel-header">
+        <div>Images for edge_side_id: <b id="panel-id">—</b></div>
+        <div class="muted" id="panel-sub">Click a line segment to load images from GitHub.</div>
+      </div>
+      <div class="panel-body">
+        <div id="gallery" class="gallery"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === Map setup ===
+    mapboxgl.accessToken = 'pk.eyJ1IjoiamFlZ2xlZSIsImEiOiJjbWU5eWJja3Ewdm12Mm1wcmp2M2Y0MXN2In0.fL8YFWQZqsmeS2coJtnGZw';
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/light-v11',
+      center: [-84.39132, 33.822556],
+      zoom: 9.5,
+      minZoom: 3
+    });
+
+    const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: [0, -8] });
+    const labelForPredicted = v => (v === 1 || v === '1') ? 'Parking' : 'No parking';
+
+    map.on('load', () => {
+      map.addSource('prediction_df_runtime', {
+        type: 'vector',
+        url: 'mapbox://jaeglee.1jptfmqr',
+        promoteId: 'edge_side_id'
+      });
+
+      map.addLayer({
+        id: 'prediction_df_runtime',
+        type: 'line',
+        source: 'prediction_df_runtime',
+        'source-layer': 'prediction_df-4w80nb',
+        paint: {
+          'line-color': [
+            'case',
+            ['==', ['get', 'predicted_avail'], 1], '#07ed41',
+            '#fb1313'
+          ],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.2, 12, 3],
+          'line-opacity': 0.9
+        },
+        layout: { 'line-join': 'round', 'line-cap': 'round' }
+      });
+
+      map.addLayer({
+        id: 'prediction_df_hover',
+        type: 'line',
+        source: 'prediction_df_runtime',
+        'source-layer': 'prediction_df-4w80nb',
+        paint: {
+          'line-color': '#000',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 9, 3.5, 12, 6],
+          'line-opacity': 0.5
+        },
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        filter: ['==', ['get', 'edge_side_id'], '___none___']
+      });
+
+      map.on('mouseenter', 'prediction_df_runtime', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+
+      map.on('mousemove', 'prediction_df_runtime', (e) => {
+        if (!e.features?.length) return;
+        const p = e.features[0].properties || {};
+        const html = `
+          <div style="font:12px/1.3 system-ui;">
+            <div><strong>${labelForPredicted(p.predicted_avail)}</strong></div>
+            <div>Edge-side ID: ${p.edge_side_id ?? '—'}</div>
+            <div>Permit: ${p.permit ?? '—'}</div>
+            <div>Detected vehicle: ${p.detectedVehicle ?? '—'}</div>
+          </div>`;
+        popup.setLngLat(e.lngLat).setHTML(html).addTo(map);
+        map.setFilter('prediction_df_hover', ['==', ['get', 'edge_side_id'], p.edge_side_id ?? '___none___']);
+      });
+
+      map.on('mouseleave', 'prediction_df_runtime', () => {
+        map.getCanvas().style.cursor = '';
+        popup.remove();
+        map.setFilter('prediction_df_hover', ['==', ['get', 'edge_side_id'], '___none___']);
+      });
+
+      // On click: load images in the right panel
+      map.on('click', 'prediction_df_runtime', (e) => {
+        if (!e.features?.length) return;
+        const id = e.features[0].properties?.edge_side_id;
+        if (!id) return;
+        loadImagesForId(String(id));
+      });
+    });
+
+    map.on('error', (e) => console.error('Mapbox GL error:', e?.error || e));
+
+    // === Right panel logic: fetch & render images from GitHub ===
+    const GH_OWNER  = 'jaeglee';
+    const GH_REPO   = 'street-parking-webdev';
+    const GH_BRANCH = 'main';
+    const FOLDERS   = ['img/detected_sign/detected_sign_sub_01', 'img/detected_sign/detected_sign_sub_02',
+                       'img/detected_vehicle/detected_vehicle_sub_01', 'img/detected_vehicle/detected_vehicle_sub_02',
+                       'img/detected_vehicle/detected_vehicle_sub_03', 'img/detected_vehicle/detected_vehicle_sub_04',
+                       'img/detected_vehicle/detected_vehicle_sub_05', 'img/detected_vehicle/detected_vehicle_sub_06']; // add/remove as needed
+    const MAX_SHOW  = 24; // cap to keep UI snappy
+    const cache     = new Map(); // cache directory listings per folder
+
+    async function listFolder(path) {
+      // Cache folder listings to avoid repeated API calls
+      if (cache.has(path)) return cache.get(path);
+
+      const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${encodeURIComponent(path)}?ref=${GH_BRANCH}`;
+      const resp = await fetch(url, { headers: { 'Accept': 'application/vnd.github+json' } });
+      if (!resp.ok) {
+        console.warn('GitHub API error for', path, resp.status, await resp.text());
+        cache.set(path, []); // cache empty to avoid retry storms
+        return []; 
+      }
+      const data = await resp.json();
+      // Keep only image files
+      const files = (Array.isArray(data) ? data : []).filter(item =>
+        item.type === 'file' && /\.(jpg)$/i.test(item.name)
+      );
+      cache.set(path, files);
+      return files;
+    }
+
+    async function fetchImagesForId(edgeSideId) {
+      // pattern: filenames contain "__<id>__"
+      const needle = `__${edgeSideId}__`;
+      const all = [];
+      for (const folder of FOLDERS) {
+        const files = await listFolder(folder);
+        const hits  = files.filter(f => f.name.includes(needle));
+        // Map to useful fields (use download_url for direct image)
+        hits.forEach(f => all.push({
+          name: f.name,
+          download_url: f.download_url,
+          html_url: f.html_url,
+          folder
+        }));
+      }
+      return all;
+    }
+
+    async function loadImagesForId(edgeSideId) {
+      // Update header
+      document.getElementById('panel-id').textContent = edgeSideId;
+      document.getElementById('panel-sub').textContent = 'Loading images from GitHub…';
+
+      try {
+        const imgs = await fetchImagesForId(edgeSideId);
+        renderGallery(edgeSideId, imgs);
+      } catch (err) {
+        console.error(err);
+        renderError('Failed to load images from GitHub.');
+      }
+    }
+
+    function renderGallery(edgeSideId, imgs) {
+      const sub = document.getElementById('panel-sub');
+      const gal = document.getElementById('gallery');
+      gal.innerHTML = '';
+
+      if (!imgs.length) {
+        sub.textContent = `No images found for edge_side_id=${edgeSideId}.`;
+        return;
+      }
+
+      sub.textContent = `${imgs.length} image(s) found. Showing up to ${Math.min(imgs.length, MAX_SHOW)}.`;
+      imgs.slice(0, MAX_SHOW).forEach(it => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <img src="${it.download_url}" alt="${it.name}">
+          <div class="meta">
+            <div class="muted">${it.folder.replace('img/', '')}</div>
+            <div style="word-break:break-all">${it.name}</div>
+            <div><a href="${it.html_url}" target="_blank" rel="noopener">Open on GitHub</a></div>
+          </div>`;
+        gal.appendChild(card);
+      });
+    }
+
+    function renderError(msg) {
+      document.getElementById('panel-sub').textContent = msg;
+      document.getElementById('gallery').innerHTML = '';
+    }
+  </script>
+</body>
+</html>

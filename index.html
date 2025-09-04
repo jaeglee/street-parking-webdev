@@ -10,24 +10,24 @@
     :root { --right-bg: #f6f7f9; }
     html, body { height: 100%; margin: 0; }
     .split { display: flex; height: 100vh; width: 100vw; }
-    .left  { position: relative; flex: 0 0 50%; min-width: 320px; overflow: hidden; background: #ddd; }
-    .right { flex: 1 1 50%;  min-width: 320px; background: var(--right-bg); display: flex; flex-direction: column; }
+    .left  { position: relative; flex: 0 0 66%; min-width: 320px; overflow: hidden; background: #ddd; }
+    .right { flex: 1 1 34%;  min-width: 320px; background: var(--right-bg); display: flex; flex-direction: column; }
     #map { position: absolute; inset: 0; }
 
     /* Title box */
     .title-box {
-      position: absolute; top: 20px; left: 20px;
+      position: absolute; top: 20px; right: 20px;
       background: rgba(0,0,0,0.6); color: #fff;
       padding: 12px 16px; border-radius: 8px;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      max-width: 320px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      max-width: 500px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
     }
     .title-box h1 { font-size: 20px; margin: 0 0 4px; font-weight: 700; }
     .title-box p { margin: 2px 0; font-size: 14px; line-height: 1.3; }
 
     /* Legend */
     .legend {
-      position: absolute; bottom: 20px; right: 20px;
+      position: absolute; top: 20px; left: 20px;
       background: rgba(255,255,255,0.9); padding: 10px;
       border-radius: 6px; font: 13px system-ui;
       box-shadow: 0 1px 2px rgba(0,0,0,.25);
@@ -64,6 +64,22 @@
     <div class="left">
       <div id="map"></div>
 
+      <!-- Overlay: Legend -->
+      <div class="legend">
+        <strong>Predicted Parking (lines)</strong>
+        <div><span style="background:#07ed41"></span> Parking</div>
+        <div><span style="background:#fb1313"></span> No Parking</div>
+        <p></p>
+        <p></p>
+        <strong>Validation Points (circles)</strong>
+        <div><span style="background:#228ffc"></span> Parking</div>
+        <div><span style="background:#e81efa"></span> No Parking</div>
+
+      </div>
+    </div>
+
+    <!-- RIGHT: Images panel -->
+    <div class="right">
       <!-- Overlay: Title -->
       <div class="title-box">
         <h1>Street Parking Prediction in Atlanta</h1>
@@ -71,16 +87,6 @@
         <p>Georgia Institute of Technology</p>
       </div>
 
-      <!-- Overlay: Legend -->
-      <div class="legend">
-        <strong>Predicted Parking</strong>
-        <div><span style="background:#07ed41"></span> Parking</div>
-        <div><span style="background:#fb1313"></span> No Parking</div>
-      </div>
-    </div>
-
-    <!-- RIGHT: Images panel -->
-    <div class="right">
       <div class="panel-header">
         <div>Images for edge_side_id: <b id="panel-id">—</b></div>
         <div class="muted" id="panel-sub">Click a line segment to load images from GitHub.</div>
@@ -93,23 +99,143 @@
 
   <script>
     // === Map setup ===
-    mapboxgl.accessToken = 'pk.eyJ1IjoiamFlZ2xlZSIsImEiOiJjbWU5eWJja3Ewdm12Mm1wcmp2M2Y0MXN2In0.fL8YFWQZqsmeS2coJtnGZw';
+    //mapboxgl.accessToken = 'pk.eyJ1IjoiamFlZ2xlZSIsImEiOiJjbWU5eWJja3Ewdm12Mm1wcmp2M2Y0MXN2In0.fL8YFWQZqsmeS2coJtnGZw';
+    mapboxgl.accessToken = 'pk.eyJ1IjoiamFlZ2xlZSIsImEiOiJjbWRwazh4NzkwZHBiMnNwdWU3NG1hbjkyIn0.L9Y_ikA1ez6oUm-XTAApGg';
     const map = new mapboxgl.Map({
       container: 'map',
-      style: 'mapbox://styles/mapbox/light-v11',
-      center: [-84.39132, 33.822556],
-      zoom: 9.5,
-      minZoom: 3
+      //style: 'mapbox://styles/mapbox/light-v11',
+      // style: 'mapbox://styles/mapbox/streets-v12',
+      style: 'mapbox://styles/mapbox/dark-v11',
+      // style: 'mapbox://styles/mapbox/satellite-v9',
+      //style: 'mapbox://styles/jaeglee/cmdqr0yl8000z01s817qt0f2a',
+      center: [-84.41167689058845, 33.7610313634532], 
+      zoom: 10.7,
+      minZoom: 7
     });
 
     const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: [0, -8] });
     const labelForPredicted = v => (v === 1 || v === '1') ? 'Parking' : 'No parking';
 
     map.on('load', () => {
+      let hoveredId = null;
+
+
+      // 1. Background (atl)
+      map.addSource('bg-atl', {
+        type: 'vector',
+        url: 'mapbox://jaeglee.5n5kcsh7'
+      });
+
+      map.addLayer({
+        id: 'bg-atl',
+        type: 'fill',
+        source: 'bg-atl',
+        'source-layer': 'atl-23a1qm',
+        paint: {
+          'fill-color': '#000000',
+          'fill-opacity': 0.2
+        }
+      }); 
+      map.addLayer({
+        id: 'bg-atl-line',
+        type: 'line',
+        source: 'bg-atl',
+        'source-layer': 'atl-23a1qm',
+        paint: {
+          'line-color': '#f7f7f7',
+          'line-opacity': 0.5,
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            10, 2,   
+            12, 4,   
+            14, 5,
+            16, 6   
+          ],
+        }
+      }); 
+
+      // 2. Background (mid)
+      map.addSource('bg-mid', {
+        type: 'vector',
+        url: 'mapbox://jaeglee.9nfudyuy'
+      });
+
+      map.addLayer({
+        id: 'bg-mid',
+        type: 'line',
+        source: 'bg-mid',
+        'source-layer': 'case_study_area_mid-bfobte',
+        paint: {
+          'line-color': '#f7f7f7',
+          'line-opacity': 0.5,
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            10, 2,   
+            12, 4,   
+            14, 5,
+            16, 6   
+          ],
+        }
+      }); 
+
+      // 3. Ground truth (parkopedia)
+      map.addSource('gt-parkopedia', {
+        type: 'vector',
+        url: 'mapbox://jaeglee.5g1ay11j'
+      });
+
+      map.addLayer({
+        id: 'gt-parkopedia',
+        type: 'circle',
+        source: 'gt-parkopedia',
+        'source-layer': 'parkopedia_df_centroid-18919y',
+        paint: {
+          'circle-radius': [
+            'interpolate', ['linear'], ['zoom'],
+            10, 0.5,   
+            12, 1,   
+            14, 6,
+            16, 8   
+          ],
+          'circle-color': '#228ffc',
+          'circle-opacity': 1.0
+        }
+      }); 
+
+      // 4. Ground truth (firsthand)
+      map.addSource('gt-firsthand', {
+        type: 'vector',
+        url: 'mapbox://jaeglee.b7gmbs7q'
+      });
+
+      map.addLayer({
+        id: 'gt-firsthand',
+        type: 'circle',
+        source: 'gt-firsthand',
+        'source-layer': 'groundtruth_df_wo_parkopedia_-4eo8b0',
+        paint: {
+          'circle-radius': [
+            'interpolate', ['linear'], ['zoom'],
+            10, 0.5,   
+            12, 1,   
+            14, 6,
+            16, 8   
+          ],
+          'circle-opacity': 1,
+          'circle-color': [
+            'case',
+            ['==', ['get', 'ground_truth_avail'], 1], '#228ffc',
+            '#e81efa'
+          ],
+        }
+      }); 
+
+
+      // 5. Prediction (prediction_df)
       map.addSource('prediction_df_runtime', {
         type: 'vector',
         url: 'mapbox://jaeglee.1jptfmqr',
-        promoteId: 'edge_side_id'
+        promoteId: 'edge_side_id', // important for feature-state by ID
       });
 
       map.addLayer({
@@ -123,60 +249,74 @@
             ['==', ['get', 'predicted_avail'], 1], '#07ed41',
             '#fb1313'
           ],
-          'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.2, 12, 3],
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            10, ['case', ['boolean', ['feature-state', 'hover'], false], 2.0, 0.7],
+            12, ['case', ['boolean', ['feature-state', 'hover'], false], 3.5, 1.0],
+            14, ['case', ['boolean', ['feature-state', 'hover'], false], 6, 2],
+            16, ['case', ['boolean', ['feature-state', 'hover'], false], 6, 3]
+          ],
           'line-opacity': 0.9
         },
         layout: { 'line-join': 'round', 'line-cap': 'round' }
       });
 
-      map.addLayer({
-        id: 'prediction_df_hover',
-        type: 'line',
-        source: 'prediction_df_runtime',
-        'source-layer': 'prediction_df-4w80nb',
-        paint: {
-          'line-color': '#000',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 9, 3.5, 12, 6],
-          'line-opacity': 0.5
-        },
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        filter: ['==', ['get', 'edge_side_id'], '___none___']
-      });
-
+      // events
       map.on('mouseenter', 'prediction_df_runtime', () => {
         map.getCanvas().style.cursor = 'pointer';
       });
 
       map.on('mousemove', 'prediction_df_runtime', (e) => {
         if (!e.features?.length) return;
-        const p = e.features[0].properties || {};
+
+        // clear previous state
+        if (hoveredId !== null) {
+          map.setFeatureState(
+            { source: 'prediction_df_runtime', sourceLayer: 'prediction_df-4w80nb', id: hoveredId },
+            { hover: false }
+          );
+        }
+
+        const f = e.features[0];
+        // with promoteId, Mapbox assigns feature.id automatically
+        const id = f.id ?? f.properties?.edge_side_id;
+        if (id == null) return;
+
+        hoveredId = id;
+        map.setFeatureState(
+          { source: 'prediction_df_runtime', sourceLayer: 'prediction_df-4w80nb', id },
+          { hover: true }
+        );
+
+        // your popup code can stay the same
+        const p = f.properties || {};
         const html = `
           <div style="font:12px/1.3 system-ui;">
-            <div><strong>${labelForPredicted(p.predicted_avail)}</strong></div>
+            <div><strong>${(p.predicted_avail==1||p.predicted_avail==='1')?'Parking':'No parking'}</strong></div>
             <div>Edge-side ID: ${p.edge_side_id ?? '—'}</div>
             <div>Permit: ${p.permit ?? '—'}</div>
             <div>Detected vehicle: ${p.detectedVehicle ?? '—'}</div>
           </div>`;
         popup.setLngLat(e.lngLat).setHTML(html).addTo(map);
-        map.setFilter('prediction_df_hover', ['==', ['get', 'edge_side_id'], p.edge_side_id ?? '___none___']);
       });
 
       map.on('mouseleave', 'prediction_df_runtime', () => {
         map.getCanvas().style.cursor = '';
         popup.remove();
-        map.setFilter('prediction_df_hover', ['==', ['get', 'edge_side_id'], '___none___']);
+        if (hoveredId !== null) {
+          map.setFeatureState(
+            { source: 'prediction_df_runtime', sourceLayer: 'prediction_df-4w80nb', id: hoveredId },
+            { hover: false }
+          );
+          hoveredId = null;
+        }
       });
 
-      // On click: load images in the right panel
       map.on('click', 'prediction_df_runtime', (e) => {
-        if (!e.features?.length) return;
-        const id = e.features[0].properties?.edge_side_id;
-        if (!id) return;
-        loadImagesForId(String(id));
+        const id = e.features?.[0]?.properties?.edge_side_id;
+        if (id) loadImagesForId(String(id));
       });
-    });
-
-    map.on('error', (e) => console.error('Mapbox GL error:', e?.error || e));
+    })
 
     // === Right panel logic: fetch & render images from GitHub ===
     const GH_OWNER  = 'jaeglee';
